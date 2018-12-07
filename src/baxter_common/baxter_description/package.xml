@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<package>
+  <name>baxter_description</name>
+  <version>1.2.0</version>
+  <description>
+    Description of Baxter Research Robot from Rethink Robotics.
+    This package contains the URDF and meshes describing Baxter.
+  </description>
+
+  <maintainer email="rsdk.support@rethinkrobotics.com">
+    Rethink Robotics Inc.
+  </maintainer>
+  <license>BSD</license>
+  <url type="website">http://sdk.rethinkrobotics.com</url>
+  <url type="repository">
+    https://github.com/RethinkRobotics/baxter_common
+  </url>
+  <url type="bugtracker">
+    https://github.com/RethinkRobotics/baxter_common/issues
+  </url>
+  <author>Rethink Robotics Inc.</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <!-- Dependencies needed to compile this package. -->
+  <build_depend>cmake_modules</build_depend>
+  <build_depend>gazebo</build_depend>
+  <build_depend>gazebo_ros</build_depend>
+  <build_depend>gazebo_plugins</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_srvs</build_depend>
+  <build_depend>std_msgs</build_depend>
+ 
+  <!-- Dependencies needed after this package is compiled. -->
+  <run_depend>gazebo_ros</run_depend>
+  <run_depend>gazebo_plugins</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>std_srvs</run_depend>
+  <run_depend>std_msgs</run_depend>
+
+  <run_depend>rethink_ee_description</run_depend>
+
+</package>

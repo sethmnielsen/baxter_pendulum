@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<robot name="baxter" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <!-- ros_control plugin -->
+  <!-- Gazebo-Specific Link Properties -->
+  <gazebo reference="left_gripper_base_joint">
+    <implicitSpringDamper>1</implicitSpringDamper>
+  </gazebo>
+  <gazebo reference="left_endpoint">
+    <implicitSpringDamper>1</implicitSpringDamper>
+  </gazebo>
+  <gazebo reference="left_pendulum_phi_joint">
+    <implicitSpringDamper>1</implicitSpringDamper>
+  </gazebo>
+  <gazebo reference="left_pendulum_theta_joint">
+    <implicitSpringDamper>1</implicitSpringDamper>
+  </gazebo>
+  <gazebo reference="left_pendulum_joint">
+    <implicitSpringDamper>1</implicitSpringDamper>
+  </gazebo>
+</robot>
