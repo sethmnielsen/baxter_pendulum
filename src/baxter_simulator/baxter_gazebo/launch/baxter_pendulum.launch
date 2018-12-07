@@ -47,7 +47,7 @@
 	      -J baxter::right_w0 -0.0806423
 	      -J baxter::right_w1 -0.0620532
 	      -J baxter::right_w2 0.0265941
-          -J baxter::left_s0 -0.41965310089686975
+          -J baxter::left_s0 0.36574506250057853
           -J baxter::left_s1 0.28035523013940145
 	      -J baxter::left_e0 -0.8644135121785612
 	      -J baxter::left_e1 1.288621217502434
@@ -63,5 +63,7 @@
       <arg name="left_electric_gripper" value="$(arg left_electric_gripper)"/>
       <arg name="gui" value="false" />
   </include>
+
+  <node name="pendulum_state_sim_node" pkg="baxter_gazebo" type="pendulum_state_sim.py" output="screen" />
 
 </launch>
