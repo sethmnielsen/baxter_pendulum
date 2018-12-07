@@ -9,6 +9,13 @@ from tf.transformations import *
 class PendulumStateSim:
 
     def __init__(self):
+        '''
+        Publishes PoseStamped message: position.x, position.y values are the gripper
+        offset from home (initial) position, and orientation.x and orientation.y values
+        are theta (angle of projection of pendulum onto xz-plane with z-axis of base frame)
+        and phi (same, but projection onto yz-plane) respectively.
+        '''
+
         self.gripper_home = np.array([0,0,0])
         self.listener = tf.TransformListener()
         self.pend_msg = PoseStamped()
