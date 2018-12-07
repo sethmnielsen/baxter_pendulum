@@ -34,16 +34,9 @@ import argparse
 
 import rospy
 
-import numpy as np
-
-import baxter_left_dynamics as bld
-import baxter_left_kinematics as blk
-
 from dynamic_reconfigure.server import (
     Server,
 )
-from baxter_left_dyn_params import params as parms
-
 from std_msgs.msg import (
     Empty,
 )
@@ -56,7 +49,7 @@ from baxter_examples.cfg import (
 from baxter_interface import CHECK_VERSION
 
 
-class PendulumControl(object):
+class JointSprings(object):
     """
     Virtual Joint Springs class for torque example.
 
@@ -81,13 +74,6 @@ class PendulumControl(object):
         self._springs = dict()
         self._damping = dict()
         self._start_angles = dict()
-
-        # dynamic params for baxter
-        self.parms = parms
-
-        # J_prev
-        self.J_prev = np.zeros((6,7))
-        self.t_prev = rospy.Time.now()
 
         # create cuff disable publisher
         cuff_ns = 'robot/limb/' + limb + '/suppress_cuff_interaction'
@@ -125,41 +111,7 @@ class PendulumControl(object):
         # record current angles/velocities
         cur_pos = self._limb.joint_angles()
         cur_vel = self._limb.joint_velocities()
-
-        # Pack up vector of q and qdot
-        q = np.zeros(7)
-        qd = np.zeros(7)
-
-        q[0] = cur_pos['left_s0']
-        q[1] = cur_pos['left_s1']
-        q[2] = cur_pos['left_e0']
-        q[3] = cur_pos['left_e1']
-        q[4] = cur_pos['left_w0']
-        q[5] = cur_pos['left_w1']
-        q[6] = cur_pos['left_w2']
-        
-        qd[0] = cur_vel['left_s0']
-        qd[1] = cur_vel['left_s1']
-        qd[2] = cur_vel['left_e0']
-        qd[3] = cur_vel['left_e1']
-        qd[4] = cur_vel['left_w0']
-        qd[5] = cur_vel['left_w1']
-        qd[6] = cur_vel['left_w2']
-
-        # Calculate dynamic params
-        M = bld.M(self.parms,q)
-        c = bld.C(self.parms, q, qd)
-        J = blk.J[6](q)
-        now = rospy.Time.now()
-        dt = (now - self.t_prev).to_sec()
-        Jdot = (J - self.J_prev)/dt
-        Jdotqd = np.dot(Jdot,qd)
-        self.J_prev = J
-        self.t_prev = now
-
         # calculate current forces
-
-
         for joint in self._start_angles.keys():
             # spring portion
             cmd[joint] = self._springs[joint] * (self._start_angles[joint] -
@@ -175,9 +127,10 @@ class PendulumControl(object):
         """
         self._limb.move_to_neutral()
 
-    def start_control(self):
+    def attach_springs(self):
         """
-        Boots up controller
+        Switches to joint torque mode and attached joint springs to current
+        joint positions.
         """
         # record initial joint angles
         self._start_angles = self._limb.joint_angles()
@@ -212,6 +165,16 @@ class PendulumControl(object):
 
 def main():
     """RSDK Joint Torque Example: Joint Springs
+
+    Moves the specified limb to a neutral location and enters
+    torque control mode, attaching virtual springs (Hooke's Law)
+    to each joint maintaining the start position.
+
+    Run this example on the specified limb and interact by
+    grabbing, pushing, and rotating each joint to feel the torques
+    applied that represent the virtual springs attached.
+    You can adjust the spring constant and damping coefficient
+    for each joint using dynamic_reconfigure.
     """
     arg_fmt = argparse.RawDescriptionHelpFormatter
     parser = argparse.ArgumentParser(formatter_class=arg_fmt,
@@ -226,11 +189,11 @@ def main():
     rospy.init_node("rsdk_joint_torque_springs_%s" % (args.limb,))
     dynamic_cfg_srv = Server(JointSpringsExampleConfig,
                              lambda config, level: config)
-    pc = PendulumControl(args.limb, dynamic_cfg_srv)
+    js = JointSprings(args.limb, dynamic_cfg_srv)
     # register shutdown callback
     rospy.on_shutdown(js.clean_shutdown)
-    pc.move_to_neutral()
-    pc.start_control()
+    js.move_to_neutral()
+    js.attach_springs()
 
 
 if __name__ == "__main__":
