@@ -48,6 +48,10 @@ from std_msgs.msg import (
     Empty,
 )
 
+from geometry_msgs.msg import (
+    PoseStamped,
+)
+
 import baxter_interface
 
 from baxter_examples.cfg import (
@@ -89,6 +93,14 @@ class PendulumControl(object):
         self.J_prev = np.zeros((6,7))
         self.t_prev = rospy.Time.now()
 
+        self.phi = 0
+        self.theta = 0
+        self.x_offset = 0
+        self.y_offset = 0
+
+        # Create pendulum subscriber
+        self._sub_pend = rospy.Subscriber("/robot/pendulum/error_pose", PoseStamped, self.pend_cb)
+
         # create cuff disable publisher
         cuff_ns = 'robot/limb/' + limb + '/suppress_cuff_interaction'
         self._pub_cuff_disable = rospy.Publisher(cuff_ns, Empty, queue_size=1)
@@ -100,6 +112,12 @@ class PendulumControl(object):
         print("Enabling robot... ")
         self._rs.enable()
         print("Running. Ctrl-c to quit")
+
+    def pend_cb_(self, msg):
+        self.phi = msg.pose.orientation.x
+        self.theta = msg.pose.orientation.y
+        self.x_offset = msg.pose.position.x
+        self.y_offset = msg.pose.position.y
 
     def _update_parameters(self):
         for joint in self._limb.joint_names():
