@@ -14,8 +14,7 @@ class PendulumStateSim:
         offset from home/initial position, and orientation.x, orientation.y values
         are theta (angle of projection of pendulum onto xz-plane with z-axis of base frame)
         and phi (same, but projection onto yz-plane) respectively.
-        x, y (gripper offset): expressed in gripper frame
-        theta, phi (pendulum offset angles): expressed in base frame
+        x, y, theta, phi are all expressed in the base frame.
         '''
 
         self.gripper_home = np.array([0,0,0])
