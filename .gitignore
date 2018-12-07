@@ -2,5 +2,4 @@ build/
 devel/
 *.pyc
 *.catkin_workspace
-*.png
 *.jpg
