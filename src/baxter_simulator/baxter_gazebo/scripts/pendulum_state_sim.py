@@ -11,9 +11,11 @@ class PendulumStateSim:
     def __init__(self):
         '''
         Publishes PoseStamped message: position.x, position.y values are the gripper
-        offset from home (initial) position, and orientation.x and orientation.y values
+        offset from home/initial position, and orientation.x, orientation.y values
         are theta (angle of projection of pendulum onto xz-plane with z-axis of base frame)
         and phi (same, but projection onto yz-plane) respectively.
+        x, y (gripper offset): expressed in gripper frame
+        theta, phi (pendulum offset angles): expressed in base frame
         '''
 
         self.gripper_home = np.array([0,0,0])
@@ -48,6 +50,8 @@ class PendulumStateSim:
             theta = np.arctan2(-xp[0], -xp[2])  # angle on xz-plane
             phi = np.arctan2(-xp[1], -xp[2])    # angle on yz-plane
 
+            self.pend_msg.header.stamp = msg.header.stamp
+            self.pend_msg.header.frame_id = "base"
             p = self.pend_msg.pose.position
             o = self.pend_msg.pose.orientation
             p.x, p.y, _ = pos_error
