@@ -68,7 +68,7 @@ def ik_test(limb):
                 position=Point(
                     x=0.795844,
                     y=0.312834,
-                    z=0.001659,
+                    z=0.301659,
                 ),
                 orientation=Quaternion(
                     x=-0.270593,

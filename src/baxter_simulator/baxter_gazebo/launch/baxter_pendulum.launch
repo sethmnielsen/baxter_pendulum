@@ -47,13 +47,13 @@
 	      -J baxter::right_w0 -0.0806423
 	      -J baxter::right_w1 -0.0620532
 	      -J baxter::right_w2 0.0265941
-          -J baxter::left_s0 0.36574506250057853
-          -J baxter::left_s1 0.28035523013940145
-	      -J baxter::left_e0 -0.8644135121785612
-	      -J baxter::left_e1 1.288621217502434
-	      -J baxter::left_w0 3.059000015258789
-	      -J baxter::left_w1 1.783495034042759
-          -J baxter::left_w2 -2.3345938899102205
+          -J baxter::left_s0 0.63019329395
+          -J baxter::left_s1 0.09460096079610605
+	      -J baxter::left_e0 -1.405004716187659
+	      -J baxter::left_e1 1.7955380271009487
+	      -J baxter::left_w0 -3.059000015258789
+	      -J baxter::left_w1 1.9637371925191702
+          -J baxter::left_w2 -1.7218680717356158
           -J baxter::left_pendulum_phi 0
           -J baxter::left_pendulum_theta 0" />
 

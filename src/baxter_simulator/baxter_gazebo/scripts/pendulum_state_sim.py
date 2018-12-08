@@ -42,6 +42,7 @@ class PendulumStateSim:
             pos_grip = np.array(pos_grip)
             if np.array_equal(self.gripper_home, [0,0,0]):
                 self.gripper_home = pos_grip
+                rospy.logerr(self.gripper_home)
 
             pos_error = pos_grip - self.gripper_home
 

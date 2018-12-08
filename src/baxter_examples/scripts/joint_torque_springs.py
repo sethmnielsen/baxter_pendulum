@@ -35,6 +35,7 @@ import argparse
 import rospy
 
 import numpy as np
+import numpy.linalg as la
 
 import baxter_left_dynamics as bld
 import baxter_left_kinematics as blk
@@ -102,11 +103,11 @@ class PendulumControl(object):
         self.theta_prev = 0
 
         # pendululm controller gains (from MATLAB)
-        self.K = np.array([145.7542, -20.0000, 49.7775, -23.5481])
+        self.K = np.array([146, -20, 50, -24])
 
         # operational space controller gains
-        self.Kp = np.diag([0, 0, 1.0, 1.0, 1.0, 1.0]) # control everything except x and y position
-        self.Kd = np.diag([0, 0, 1.0, 1.0, 1.0, 1.0]) # control everything except x and y velocity
+        self.Kp = 10*np.diag([0.0, 0.0, 10.0, 0.5, 0.5, 0.5]) # control everything except x and y position
+        self.Kd = 3*np.diag([0.0, 0.0, 5.0, 0.1, 0.1, 0.1]) # control everything except x and y velocity
 
         # Create pendulum subscriber
         self._sub_pend = rospy.Subscriber("/robot/pendulum/error_pose", PoseStamped, self.pend_cb)
@@ -124,8 +125,8 @@ class PendulumControl(object):
         print("Running. Ctrl-c to quit")
 
     def pend_cb(self, msg):
-        self.phi = msg.pose.orientation.x
-        self.theta = msg.pose.orientation.y
+        self.theta = -msg.pose.orientation.x
+        self.phi = -msg.pose.orientation.y
         self.x_offset = msg.pose.position.x
         self.y_offset = msg.pose.position.y
 
@@ -177,6 +178,8 @@ class PendulumControl(object):
         # time
         now = rospy.Time.now()
         dt = (now - self.t_prev).to_sec()
+        if dt < 1e-6:
+            dt = 0.1
 
         # Calculate dynamic params
         M = bld.M(self.parms,q)
@@ -185,19 +188,18 @@ class PendulumControl(object):
         g = bld.g(self.parms, q)
 
         Jdot = np.zeros((6,7))
-        if abs(dt) > 1e-8:
-            Jdot = (J - self.J_prev)/dt
+        Jdot = (J - self.J_prev)/dt
 
         Jdotqd = np.dot(Jdot,qd)
         self.J_prev = J
         self.t_prev = now
 
+
         # compensate for mass of pendulum
         F = np.zeros(6)
         F[2] = 9.81*0.326
 
-        # current position and velocity
-        xi = np.zeros((6,1)) # TODO populate this
+        xi = self.calc_xi(q)
         xi_dot = J.dot(qd)
 
         #======================================================================
@@ -209,14 +211,15 @@ class PendulumControl(object):
         # x direction
         #----------------------------------------------------------------------
 
-        x_xaxis = np.zeros((4,1))
+        x_xaxis = np.zeros(4)
         x_xaxis[0] = self.theta # TODO check sign here
-        x_xaxis[1] = self.x_offset
-        x_xaxis[2] = xi_dot[0]
-        x_xaxis[3] = (self.theta - self.theta_prev) / dt
+        x_xaxis[1] = xi[0]
+        x_xaxis[3] = xi_dot[0]
+        x_xaxis[2] = (self.theta - self.theta_prev) / dt
         self.theta_prev = self.theta
 
-        xdes_xaxis = np.zeros((4,1))
+        xdes_xaxis = np.zeros(4)
+        xdes_xaxis[1] = self.start_xi[0]
         # TODO allow offset in position (xdes_xaxis[1])
 
         acc_x = self.K.dot(xdes_xaxis - x_xaxis)
@@ -225,14 +228,15 @@ class PendulumControl(object):
         # y direction
         #----------------------------------------------------------------------
 
-        x_yaxis = np.zeros((4,1))
+        x_yaxis = np.zeros(4)
         x_yaxis[0] = self.phi # TODO check sign here
-        x_yaxis[1] = self.y_offset
-        x_yaxis[2] = xi_dot[1]
-        x_yaxis[3] = (self.phi - self.phi_prev) / dt
+        x_yaxis[1] = xi[1]
+        x_yaxis[3] = xi_dot[1]
+        x_yaxis[2] = (self.phi - self.phi_prev) / dt
         self.phi_prev = self.phi
 
-        xdes_yaxis = np.zeros((4,1))
+        xdes_yaxis = np.zeros(4)
+        xdes_yaxis[1] = self.start_xi[1]
         # TODO allow offset in position (xdes_yaxis[1])
 
         acc_y = self.K.dot(xdes_yaxis - x_yaxis)
@@ -242,19 +246,25 @@ class PendulumControl(object):
         #======================================================================
 
         # compute desired pose and derivatives
-        xi_ddot_des = np.zeros((6,1))
+        xi_ddot_des = np.zeros(6)
         xi_ddot_des[0] = acc_x
         xi_ddot_des[1] = acc_y
 
-        xi_dot_des = np.zeros((6,1))
+        xi_dot_des = np.zeros(6)
 
-        xi_des = np.zeros((6,1))
-        xi_des[2] = 1 # TODO original z position
-        xi_des[5] = 0.0 # TODO original angle about z
+        xi_des = np.copy(self.start_xi)
 
         # compute torques
-        v = np.linalg.pinv(J).dot(xi_ddot_des + self.Kp.dot(xi_des - xi) + self.Kd.dot(xi_dot_des - xi_dot) - Jdotqd) # TODO we can't just subtract xi_des and xi, can we?
+        v = np.linalg.pinv(J).dot(xi_ddot_des + self.Kp.dot(self.sub_xi(xi_des,xi)) + self.Kd.dot(xi_dot_des - xi_dot) - Jdotqd) # TODO we can't just subtract xi_des and xi, can we?
         tau_comp = M.dot(v) + c + J.T.dot(F)
+
+        if abs(self.phi) > 180*np.pi/180:
+            tau_comp = np.zeros(7)
+        if abs(self.theta) > 180*np.pi/180:
+            tau_comp = np.zeros(7)
+        if la.norm((xi_des - xi)[:3]) > 10:
+            tau_comp = np.zeros(7)
+
 
         # calculate current forces
 
@@ -275,12 +285,89 @@ class PendulumControl(object):
         """
         self._limb.move_to_neutral()
 
+    def calc_xi(self, q):
+        skew_sym = lambda u: np.array([[0, -u[2], u[1]],[u[2], 0, -u[0]],[-u[1], u[0], 0]])
+        expu = lambda u, th: np.eye(3) + np.sin(th)*skew_sym(u) + (1 - np.cos(th))*skew_sym(u).dot(skew_sym(u))
+
+        # current position and velocity
+        T = blk.FK[6](q)
+        val, vec = la.eig(T[:3,:3])
+        idx = np.where(np.imag(val) == 0)[0]
+        th = np.arccos((np.trace(T[:3,:3]) - 1)/2)
+
+
+        if len(idx) > 1:
+            th = 0
+
+        # Check to find sign of angle
+        if np.allclose(T[:3,:3], expu(np.real(vec[:,idx[0]]),th)):
+            th = th
+        else:
+            th = -th
+
+        xi = np.zeros(6) # TODO populate this
+        xi[:3] = T[:3,3].flatten()
+        xi[3:] = th*np.real(vec[:,idx[0]]).flatten()
+        return xi
+
+    def sub_xi(self, xi1, xi2):
+        dxi = np.zeros(6)
+        dxi[:3] = xi1[:3] - xi2[:3]
+
+        skew_sym = lambda u: np.array([[0, -u[2], u[1]],[u[2], 0, -u[0]],[-u[1], u[0], 0]])
+        expu = lambda u, th: np.eye(3) + np.sin(th)*skew_sym(u) + (1 - np.cos(th))*skew_sym(u).dot(skew_sym(u))
+
+        th1 = la.norm(xi1[3:])
+        if abs(th1) < 1e-8:
+            v1 = np.zeros(3)
+        else:
+            v1 = xi1[3:]/th1
+
+        th2 = la.norm(xi2[3:])
+        if abs(th2) < 1e-8:
+            v2 = np.zeros(3)
+        else:
+            v2 = xi2[3:]/th2
+
+        R1 = expu(v1,th1)
+        R2 = expu(v2,th2)
+        R = R2.T.dot(R1)
+
+        val, vec = la.eig(R)
+        th = np.arccos((np.trace(R) - 1)/2)
+        idx = np.where(np.imag(val) == 0)[0]
+
+
+        if len(idx) > 1:
+            th = 0
+
+
+        # Check to find sign of angle
+        if np.allclose(R, expu(np.real(vec[:,idx[0]]),th)):
+            th = th
+        else:
+            th = -th
+        dxi[3:] = th*np.real(vec[:,idx[0]]).flatten()
+        return dxi
+
+
     def start_control(self):
         """
         Boots up controller
         """
         # record initial joint angles
         self._start_angles = self._limb.joint_angles()
+
+        q = np.zeros(7)
+        q[0] = self._start_angles['left_s0']
+        q[1] = self._start_angles['left_s1']
+        q[2] = self._start_angles['left_e0']
+        q[3] = self._start_angles['left_e1']
+        q[4] = self._start_angles['left_w0']
+        q[5] = self._start_angles['left_w1']
+        q[6] = self._start_angles['left_w2']
+
+        self.start_xi = self.calc_xi(q)
 
         # set control rate
         control_rate = rospy.Rate(self._rate)
