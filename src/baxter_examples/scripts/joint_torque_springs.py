@@ -113,7 +113,7 @@ class PendulumControl(object):
         self._rs.enable()
         print("Running. Ctrl-c to quit")
 
-    def pend_cb_(self, msg):
+    def pend_cb(self, msg):
         self.phi = msg.pose.orientation.x
         self.theta = msg.pose.orientation.y
         self.x_offset = msg.pose.position.x
@@ -168,22 +168,32 @@ class PendulumControl(object):
         M = bld.M(self.parms,q)
         c = bld.C(self.parms, q, qd)
         J = blk.J[6](q)
+        g = bld.g(self.parms, q)
         now = rospy.Time.now()
         dt = (now - self.t_prev).to_sec()
-        Jdot = (J - self.J_prev)/dt
+
+        Jdot = np.zeros((6,7))
+        if abs(dt) > 1e-8:
+            Jdot = (J - self.J_prev)/dt
+
         Jdotqd = np.dot(Jdot,qd)
         self.J_prev = J
         self.t_prev = now
 
+        F = np.zeros(6)
+        F[2] = 9.81*0.326
+        tau_comp = g
+
         # calculate current forces
 
+        tau = {'left_s0': tau_comp[0], 'left_s1': tau_comp[1], 'left_e0': tau_comp[2],
+                'left_e1': tau_comp[3], 'left_w0': tau_comp[4], 'left_w1': tau_comp[5],
+                'left_w2': tau_comp[6]}
 
         for joint in self._start_angles.keys():
             # spring portion
-            cmd[joint] = self._springs[joint] * (self._start_angles[joint] -
-                                                   cur_pos[joint])
-            # damping portion
-            cmd[joint] -= self._damping[joint] * cur_vel[joint]
+            cmd[joint] = tau[joint]
+
         # command new joint torques
         self._limb.set_joint_torques(cmd)
 
@@ -246,8 +256,7 @@ def main():
                              lambda config, level: config)
     pc = PendulumControl(args.limb, dynamic_cfg_srv)
     # register shutdown callback
-    rospy.on_shutdown(js.clean_shutdown)
-    pc.move_to_neutral()
+    rospy.on_shutdown(pc.clean_shutdown)
     pc.start_control()
 
 

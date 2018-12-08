@@ -1,4 +1,4 @@
-from math import sin, cos
+import math
 from offset_util import offset_and_reshape
 import numpy as np
 pi = np.pi

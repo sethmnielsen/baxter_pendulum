@@ -1,4 +1,4 @@
-from math import sin, cos
+import math
 import numpy as np
 
 
@@ -1810,7 +1810,7 @@ def M(parms, q):
     M_out[47] = x241
     M_out[48] = parms[71]
 #
-    return np.reshape(M,(7,7))
+    return np.reshape(M_out,(7,7))
 
 
 
@@ -4700,7 +4700,7 @@ def g(parms, q):
     g_out[5] = x45
     g_out[6] = x40
 #
-    return g_out
+    return np.array(g_out)
 
 
 
