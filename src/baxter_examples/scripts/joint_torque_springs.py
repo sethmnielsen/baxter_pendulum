@@ -98,6 +98,16 @@ class PendulumControl(object):
         self.x_offset = 0
         self.y_offset = 0
 
+        self.phi_prev = 0
+        self.theta_prev = 0
+
+        # pendululm controller gains (from MATLAB)
+        self.K = np.array([145.7542, -20.0000, 49.7775, -23.5481])
+
+        # operational space controller gains
+        self.Kp = np.diag([0, 0, 1.0, 1.0, 1.0, 1.0]) # control everything except x and y position
+        self.Kd = np.diag([0, 0, 1.0, 1.0, 1.0, 1.0]) # control everything except x and y velocity
+
         # Create pendulum subscriber
         self._sub_pend = rospy.Subscriber("/robot/pendulum/error_pose", PoseStamped, self.pend_cb)
 
@@ -155,7 +165,7 @@ class PendulumControl(object):
         q[4] = cur_pos['left_w0']
         q[5] = cur_pos['left_w1']
         q[6] = cur_pos['left_w2']
-        
+
         qd[0] = cur_vel['left_s0']
         qd[1] = cur_vel['left_s1']
         qd[2] = cur_vel['left_e0']
@@ -164,13 +174,15 @@ class PendulumControl(object):
         qd[5] = cur_vel['left_w1']
         qd[6] = cur_vel['left_w2']
 
-        # Calculate dynamic params
-        M = bld.M(self.parms,q)
-        c = bld.C(self.parms, q, qd)
-        J = blk.J[6](q)
-        g = bld.g(self.parms, q)
+        # time
         now = rospy.Time.now()
         dt = (now - self.t_prev).to_sec()
+
+        # Calculate dynamic params
+        M = bld.M(self.parms,q)
+        c = bld.c(self.parms, q, qd)
+        J = blk.J[6](q)
+        g = bld.g(self.parms, q)
 
         Jdot = np.zeros((6,7))
         if abs(dt) > 1e-8:
@@ -180,9 +192,69 @@ class PendulumControl(object):
         self.J_prev = J
         self.t_prev = now
 
+        # compensate for mass of pendulum
         F = np.zeros(6)
         F[2] = 9.81*0.326
-        tau_comp = g
+
+        # current position and velocity
+        xi = np.zeros((6,1)) # TODO populate this
+        xi_dot = J.dot(qd)
+
+        #======================================================================
+        # pendulum controller (outer loop)
+        # x = [theta, d, omega, v]
+        #======================================================================
+
+        #----------------------------------------------------------------------
+        # x direction
+        #----------------------------------------------------------------------
+
+        x_xaxis = np.zeros((4,1))
+        x_xaxis[0] = self.theta # TODO check sign here
+        x_xaxis[1] = self.x_offset
+        x_xaxis[2] = xi_dot[0]
+        x_xaxis[3] = (self.theta - self.theta_prev) / dt
+        self.theta_prev = self.theta
+
+        xdes_xaxis = np.zeros((4,1))
+        # TODO allow offset in position (xdes_xaxis[1])
+
+        acc_x = self.K.dot(xdes_xaxis - x_xaxis)
+
+        #----------------------------------------------------------------------
+        # y direction
+        #----------------------------------------------------------------------
+
+        x_yaxis = np.zeros((4,1))
+        x_yaxis[0] = self.phi # TODO check sign here
+        x_yaxis[1] = self.y_offset
+        x_yaxis[2] = xi_dot[1]
+        x_yaxis[3] = (self.phi - self.phi_prev) / dt
+        self.phi_prev = self.phi
+
+        xdes_yaxis = np.zeros((4,1))
+        # TODO allow offset in position (xdes_yaxis[1])
+
+        acc_y = self.K.dot(xdes_yaxis - x_yaxis)
+
+        #======================================================================
+        # robot arm controller (inner loop)
+        #======================================================================
+
+        # compute desired pose and derivatives
+        xi_ddot_des = np.zeros((6,1))
+        xi_ddot_des[0] = acc_x
+        xi_ddot_des[1] = acc_y
+
+        xi_dot_des = np.zeros((6,1))
+
+        xi_des = np.zeros((6,1))
+        xi_des[2] = 1 # TODO original z position
+        xi_des[5] = 0.0 # TODO original angle about z
+
+        # compute torques
+        v = np.linalg.pinv(J).dot(xi_ddot_des + self.Kp.dot(xi_des - xi) + self.Kd.dot(xi_dot_des - xi_dot) - Jdotqd) # TODO we can't just subtract xi_des and xi, can we?
+        tau_comp = M.dot(v) + c + J.T.dot(F)
 
         # calculate current forces
 
