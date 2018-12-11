@@ -42,7 +42,7 @@
     </link>
 
     <joint name="${side}_endpoint" type="fixed">
-      <origin rpy="0 0 0" xyz="0 0 0.02"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
       <parent link="${side}_gripper_base"/>
       <child link="${side}_gripper"/>
     </joint>
@@ -60,7 +60,7 @@
     <joint name="${side}_pendulum_phi_joint" type="revolute">
       <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
       <axis xyz="0 0 1"/>
-      <limit effort="0.0" velocity="1.0" lower="${-pi/2}" upper ="${pi/2}"/>
+      <limit effort="0.0" velocity="10.0" lower="${-pi/2}" upper ="${pi/2}"/>
       <parent link="${side}_gripper"/>
       <child link="${side}_pendulum_phi"/>
     </joint>
@@ -75,9 +75,9 @@
     </link>
 
     <joint name="${side}_pendulum_theta_joint" type="revolute">
-      <origin rpy="0.0 0.0 0.0" xyz="0.0 0.001 0.0"/>
+      <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
       <axis xyz="0 1 0" />
-      <limit effort="0.0" velocity="1.0" lower="${-pi/2}" upper ="${pi/2}"/>
+      <limit effort="0.0" velocity="10.0" lower="${-pi/2}" upper ="${pi/2}"/>
       <parent link="${side}_pendulum_phi"/>
       <child link="${side}_pendulum_theta"/>
     </joint>
@@ -105,7 +105,7 @@
     </link>
 
     <joint name="${side}_pendulum_joint" type="fixed">
-      <origin rpy="0.0 0.0 0.0" xyz="-0.01 0.0 0.0"/>
+      <origin rpy="0.0 0.0 0.0" xyz="0.0 0.0 0.0"/>
       <parent link="${side}_pendulum_theta"/>
       <child link="${side}_pendulum"/>
     </joint>

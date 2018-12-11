@@ -35,7 +35,7 @@ import argparse
 import rospy
 
 import numpy as np
-import numpy.linalg as la
+import scipy.linalg as la
 
 import baxter_left_dynamics as bld
 import baxter_left_kinematics as blk
@@ -103,11 +103,14 @@ class PendulumControl(object):
         self.theta_prev = 0
 
         # pendululm controller gains (from MATLAB)
-        self.K = np.array([146, -20, 50, -24])
+        self.K = np.array([150, 0, 20, 0])
+        # self.K = np.array([150, -10, 20, 5])
 
         # operational space controller gains
-        self.Kp = 10*np.diag([0.0, 0.0, 10.0, 0.5, 0.5, 0.5]) # control everything except x and y position
-        self.Kd = 3*np.diag([0.0, 0.0, 5.0, 0.1, 0.1, 0.1]) # control everything except x and y velocity
+        # self.Kp = 10*np.diag([0.0, 0.0, 10.0, 0.1, 0.1, 0.1]) # control everything except x and y position
+        self.Kp = np.diag([0.0, 0.0, 10.0, 0.0, 0.0, 0.0]) # control everything except x and y position
+        # self.Kd = np.diag([0.0, 0.0, 5.0, 0.1, 0.1, 0.1]) # control everything except x and y velocity
+        self.Kd = np.diag([0.0, 0.0, 5.0, 0.0, 0.0, 0.0]) # control everything except x and y velocity
 
         # Create pendulum subscriber
         self._sub_pend = rospy.Subscriber("/robot/pendulum/error_pose", PoseStamped, self.pend_cb)
@@ -175,11 +178,15 @@ class PendulumControl(object):
         qd[5] = cur_vel['left_w1']
         qd[6] = cur_vel['left_w2']
 
+        sigmoid = lambda x: (1.0/(1 + np.exp(-15*x)) - 1)
+
         # time
         now = rospy.Time.now()
         dt = (now - self.t_prev).to_sec()
         if dt < 1e-6:
             dt = 0.1
+
+        xi = self.calc_xi(q)
 
         # Calculate dynamic params
         M = bld.M(self.parms,q)
@@ -187,20 +194,28 @@ class PendulumControl(object):
         J = blk.J[6](q)
         g = bld.g(self.parms, q)
 
+        th = la.norm(xi[3:])
+        v = xi[3:]/th
+        skew_sym = lambda u: np.array([[0, -u[2], u[1]],[u[2], 0, -u[0]],[-u[1], u[0], 0]])
+
+        T = np.zeros((6,6))
+        T[:3,:3] = np.eye(3)
+        T[3:,3:] = la.inv(np.eye(3) - skew_sym(v)*(1 - np.cos(th))/th + skew_sym(v).dot(skew_sym(v))*(th - np.sin(th))/th)
+        
+
+        JA = T.dot(J)
+
         Jdot = np.zeros((6,7))
-        Jdot = (J - self.J_prev)/dt
-
+        Jdot = (JA - self.J_prev)/dt
         Jdotqd = np.dot(Jdot,qd)
-        self.J_prev = J
+        self.J_prev = JA
         self.t_prev = now
-
 
         # compensate for mass of pendulum
         F = np.zeros(6)
         F[2] = 9.81*0.326
 
-        xi = self.calc_xi(q)
-        xi_dot = J.dot(qd)
+        xi_dot = JA.dot(qd)
 
         #======================================================================
         # pendulum controller (outer loop)
@@ -222,7 +237,9 @@ class PendulumControl(object):
         xdes_xaxis[1] = self.start_xi[0]
         # TODO allow offset in position (xdes_xaxis[1])
 
-        acc_x = self.K.dot(xdes_xaxis - x_xaxis)
+        e_x = xdes_xaxis - x_xaxis
+
+        acc_x = self.K.dot(e_x)
 
         #----------------------------------------------------------------------
         # y direction
@@ -239,7 +256,9 @@ class PendulumControl(object):
         xdes_yaxis[1] = self.start_xi[1]
         # TODO allow offset in position (xdes_yaxis[1])
 
-        acc_y = self.K.dot(xdes_yaxis - x_yaxis)
+        e_y = xdes_yaxis - x_yaxis
+
+        acc_y = self.K.dot(e_y)
 
         #======================================================================
         # robot arm controller (inner loop)
@@ -254,15 +273,17 @@ class PendulumControl(object):
 
         xi_des = np.copy(self.start_xi)
 
-        # compute torques
-        v = np.linalg.pinv(J).dot(xi_ddot_des + self.Kp.dot(self.sub_xi(xi_des,xi)) + self.Kd.dot(xi_dot_des - xi_dot) - Jdotqd) # TODO we can't just subtract xi_des and xi, can we?
-        tau_comp = M.dot(v) + c + J.T.dot(F)
 
-        if abs(self.phi) > 180*np.pi/180:
+        # compute torques
+        rospy.logerr(self.sub_xi(xi_des,xi))
+        v = np.linalg.pinv(JA).dot(xi_ddot_des + self.Kp.dot(self.sub_xi(xi_des,xi)) + self.Kd.dot(xi_dot_des - xi_dot) - Jdotqd) # TODO we can't just subtract xi_des and xi, can we?
+        tau_comp = M.dot(v)  + c + J.T.dot(F)
+
+        if abs(self.phi) > 30*np.pi/180:
             tau_comp = np.zeros(7)
-        if abs(self.theta) > 180*np.pi/180:
+        if abs(self.theta) > 30*np.pi/180:
             tau_comp = np.zeros(7)
-        if la.norm((xi_des - xi)[:3]) > 10:
+        if la.norm((xi_des - xi)[:3]) > 5:
             tau_comp = np.zeros(7)
 
 
@@ -275,6 +296,11 @@ class PendulumControl(object):
         for joint in self._start_angles.keys():
             # spring portion
             cmd[joint] = tau[joint]
+
+            e_j = self._start_angles[joint] - cur_pos[joint]
+            cmd[joint] += self._springs[joint] * e_j
+
+            cmd[joint] -= self._damping[joint] * cur_vel[joint]
 
         # command new joint torques
         self._limb.set_joint_torques(cmd)
@@ -333,21 +359,9 @@ class PendulumControl(object):
         R2 = expu(v2,th2)
         R = R2.T.dot(R1)
 
-        val, vec = la.eig(R)
-        th = np.arccos((np.trace(R) - 1)/2)
-        idx = np.where(np.imag(val) == 0)[0]
+        v_skew = la.logm(R)
 
-
-        if len(idx) > 1:
-            th = 0
-
-
-        # Check to find sign of angle
-        if np.allclose(R, expu(np.real(vec[:,idx[0]]),th)):
-            th = th
-        else:
-            th = -th
-        dxi[3:] = th*np.real(vec[:,idx[0]]).flatten()
+        dxi[3:] = np.array([v_skew[2,1], -v_skew[2,0], v_skew[1,0]])
         return dxi
 
 
